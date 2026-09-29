@@ -138,7 +138,7 @@ A working devkitPro installation with the Nintendo Switch development packages i
 Clone the repository and enter the project directory:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/FolderWifi.git
+git clone https://github.com/DgoDev-Prog/FolderWifi.git
 cd FolderWifi
 ```
 
