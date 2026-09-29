@@ -363,7 +363,9 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
 
         html += "  <div class=\"item-actions\">";
         if (g_isOnline) {
-            if (!file.isDir) {
+            if (file.isDir) {
+                html += "    <a href=\"/download-folder?path=" + file.fullPath + "\" class=\"action-icon\" title=\"Descargar carpeta como ZIP\">📥</a>";
+            } else {
                 html += "    <a href=\"/download?file=" + file.fullPath + "\" class=\"action-icon\" title=\"Descargar\">📥</a>";
             }
             html += "    <button class=\"action-icon\" title=\"Renombrar\" onclick=\"promptRename('" + file.fullPath + "', '" + file.name + "')\">✏️</button>";
@@ -843,6 +845,227 @@ void handleClient(int clientFd) {
             }
 
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
+
+            } else if (url.rfind("/download-folder", 0) == 0) {
+                if (!g_isOnline) {
+                    sendHttpResponse(
+                        clientFd,
+                        "403 Forbidden",
+                        "text/plain",
+                        "Acceso denegado: Descargas bloqueadas en OFFLINE"
+                    );
+                    close(clientFd);
+                    return;
+                }
+
+                size_t pathPos = url.find("path=");
+
+                if (pathPos == std::string::npos) {
+                    sendHttpResponse(
+                        clientFd,
+                        "400 Bad Request",
+                        "text/plain",
+                        "Falta el parametro path"
+                    );
+                    close(clientFd);
+                    return;
+                }
+
+                std::string requestedPath =
+                    urlDecode(url.substr(pathPos + 5));
+
+                std::string sourcePath =
+                    FolderWifi::FileManager::normalizeSdPath(requestedPath);
+
+                if (sourcePath.empty() || sourcePath == "sdmc:/") {
+                    sendHttpResponse(
+                        clientFd,
+                        "400 Bad Request",
+                        "text/plain",
+                        "Ruta invalida"
+                    );
+                    close(clientFd);
+                    return;
+                }
+
+                // Confirmar que realmente sea una carpeta.
+                struct stat sourceStat;
+
+                if (stat(sourcePath.c_str(), &sourceStat) != 0 ||
+                    !S_ISDIR(sourceStat.st_mode)) {
+
+                    sendHttpResponse(
+                        clientFd,
+                        "404 Not Found",
+                        "text/plain",
+                        "Carpeta no encontrada"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+                // Obtener nombre de la carpeta.
+                while (sourcePath.length() > 6 &&
+                    sourcePath.back() == '/') {
+                    sourcePath.pop_back();
+                }
+
+                size_t lastSlash = sourcePath.find_last_of('/');
+
+                std::string folderName =
+                    (lastSlash == std::string::npos)
+                        ? sourcePath
+                        : sourcePath.substr(lastSlash + 1);
+
+                // Crear ZIP temporal al lado de la carpeta.
+                std::string parentPath =
+                    (lastSlash == std::string::npos)
+                        ? "sdmc:/"
+                        : sourcePath.substr(0, lastSlash);
+
+                if (parentPath == "sdmc:") {
+                    parentPath = "sdmc:/";
+                }
+
+                std::string tempZipPath = parentPath;
+
+                if (tempZipPath.back() != '/') {
+                    tempZipPath += "/";
+                }
+
+                tempZipPath +=
+                    ".folderwifi_" +
+                    std::to_string(static_cast<long long>(time(nullptr))) +
+                    ".zip";
+
+                std::vector<std::string> sources;
+                sources.push_back(sourcePath);
+
+                std::string error;
+
+                addLog("Preparando ZIP: " + folderName);
+
+                if (!FolderWifi::ArchiveManager::createZip(
+                        sources,
+                        tempZipPath,
+                        error
+                    )) {
+
+                    addLog("Error ZIP: " + error);
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Error,
+                        "folder_download_failed",
+                        "No se pudo preparar la descarga: " + folderName
+                    );
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain; charset=utf-8",
+                        "Error: " + error
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+                // Abrir ZIP temporal para enviarlo.
+                FILE* zipFile = fopen(tempZipPath.c_str(), "rb");
+
+                if (!zipFile) {
+                    remove(tempZipPath.c_str());
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "No se pudo abrir el ZIP temporal"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+                struct stat zipStat;
+
+                if (stat(tempZipPath.c_str(), &zipStat) != 0) {
+                    fclose(zipFile);
+                    remove(tempZipPath.c_str());
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "No se pudo obtener el tamaño del ZIP"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+                std::string downloadName =
+                    folderName + ".zip";
+
+                std::string headers =
+                    "HTTP/1.1 200 OK\r\n";
+
+                headers +=
+                    "Content-Type: application/zip\r\n";
+
+                headers +=
+                    "Content-Disposition: attachment; filename=\"" +
+                    downloadName +
+                    "\"\r\n";
+
+                headers +=
+                    "Content-Length: " +
+                    std::to_string(
+                        static_cast<unsigned long long>(zipStat.st_size)
+                    ) +
+                    "\r\n";
+
+                headers +=
+                    "Connection: close\r\n\r\n";
+
+                send(
+                    clientFd,
+                    headers.c_str(),
+                    headers.length(),
+                    0
+                );
+
+                char zipBuffer[65536];
+                size_t bytesRead;
+
+                while ((bytesRead = fread(
+                            zipBuffer,
+                            1,
+                            sizeof(zipBuffer),
+                            zipFile
+                        )) > 0) {
+
+                    send(
+                        clientFd,
+                        zipBuffer,
+                        bytesRead,
+                        0
+                    );
+                }
+
+                fclose(zipFile);
+
+                // El ZIP solo era temporal.
+                remove(tempZipPath.c_str());
+
+                addLog("Carpeta descargada: " + folderName);
+
+                FolderWifi::NotificationManager::notify(
+                    FolderWifi::NotificationType::Success,
+                    "folder_downloaded",
+                    "Carpeta descargada: " + folderName
+                );
 
         } else if (url.rfind("/download", 0) == 0) {
             if (!g_isOnline) {
