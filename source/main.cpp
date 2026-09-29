@@ -15,7 +15,7 @@
 #include <string>
 #include <algorithm>
 #include <time.h>
-
+#include "notification_manager.hpp"
 #include "gui.hpp"
 #include "file_manager.hpp"
 
@@ -276,21 +276,35 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
 )HTML";
 
     if (currentPath != "sdmc:/" && currentPath != "sdmc:" && !currentPath.empty()) {
-        std::string parentPath = currentPath;
-        size_t lastSlash = parentPath.find_last_of('/');
-        if (lastSlash != std::string::npos && lastSlash > 6) {
-            parentPath = parentPath.substr(0, lastSlash);
-        } else {
-            parentPath = "sdmc:/";
-        }
-        html += R"HTML(
-            <div class="file-item">
-                <a href="/?path=)HTML" + parentPath + R"HTML(" class="file-info">
-                    <span class="file-icon">⬆️</span>
-                    <span class="file-name">.. (Volver atrás)</span>
-                </a>
-            </div>
-        )HTML";
+    std::string parentPath = currentPath;
+
+    size_t lastSlash = parentPath.find_last_of('/');
+
+    if (lastSlash != std::string::npos && lastSlash > 6) {
+        parentPath = parentPath.substr(0, lastSlash);
+    } else {
+        parentPath = "sdmc:/";
+    }
+
+    // Volver directamente a la raíz de la SD
+    html += R"HTML(
+        <div class="file-item">
+            <a href="/?path=sdmc:/" class="file-info">
+                <span class="file-icon">🏠</span>
+                <span class="file-name">Volver a raíz</span>
+            </a>
+        </div>
+    )HTML";
+
+    // Volver únicamente un nivel
+    html += R"HTML(
+        <div class="file-item">
+            <a href="/?path=)HTML" + parentPath + R"HTML(" class="file-info">
+                <span class="file-icon">⬆️</span>
+                <span class="file-name">.. (Volver atrás)</span>
+            </a>
+        </div>
+    )HTML";
     }
 
     for (const auto& file : files) {
@@ -533,12 +547,35 @@ void handleClient(int clientFd) {
 
             if (!fullFolderPath.empty()) {
                 if (mkdir(fullFolderPath.c_str(), 0777) == 0) {
+
                     addLog("Carpeta creada: " + folderName);
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Success,
+                        "folder_created",
+                        "Carpeta creada correctamente: " + folderName
+                    );
+
                 } else {
+
                     addLog("Error al crear carpeta: " + folderName);
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Error,
+                        "folder_create_failed",
+                        "No se pudo crear la carpeta: " + folderName
+                    );
                 }
+
             } else {
+
                 addLog("Ruta rechazada al crear carpeta");
+
+                FolderWifi::NotificationManager::notify(
+                    FolderWifi::NotificationType::Warning,
+                    "invalid_path",
+                    "La ruta o el nombre indicado no es valido"
+                );
             }
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
 
