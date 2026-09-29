@@ -1,0 +1,82 @@
+name: Suggest a feature
+description: Suggest a new feature or improvement for FolderWifi.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve FolderWifi.
+
+        Please describe your suggestion as clearly as possible.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of FolderWifi would this suggestion improve?
+      options:
+        - Nintendo Switch interface
+        - Web interface
+        - File management
+        - Network / HTTP server
+        - Security
+        - Installation / configuration
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or limitation
+      description: What problem, limitation, or inconvenience would this feature address?
+      placeholder: Describe the current situation and why the improvement would be useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed feature
+      description: Describe how you would like the feature to work.
+      placeholder: Explain the behavior or functionality you would like to see in FolderWifi.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Give an example of when or how you would use this feature.
+      placeholder: Example scenario...
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you considered another way to solve the same problem?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Add screenshots, mockups, links, or any other useful context.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked existing issues and did not find the same suggestion already submitted.
+          required: true
+        - label: I understand that FolderWifi is currently Alpha software and planned features may change.
+          required: true

@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: FolderWifi Releases
+    url: https://github.com/DgoDev-Prog/FolderWifi/releases
+    about: Download official FolderWifi releases and pre-releases.
+
+  - name: FolderWifi Documentation
+    url: https://github.com/DgoDev-Prog/FolderWifi#readme
+    about: Read the project documentation, installation instructions, current limitations, and usage information.

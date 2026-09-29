@@ -1,0 +1,108 @@
+name: Report a bug
+description: Report a problem or unexpected behavior in FolderWifi.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve FolderWifi.
+
+        Please complete the information below so the problem can be reproduced and investigated.
+
+  - type: input
+    id: folderwifi-version
+    attributes:
+      label: FolderWifi version
+      description: Version of FolderWifi where the problem occurred.
+      placeholder: v0.1.0-alpha
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: FolderWifi mode
+      description: Which mode was active when the issue occurred?
+      options:
+        - Offline
+        - Online
+        - Both
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Nintendo Switch firmware
+      placeholder: e.g. 20.x.x
+    validations:
+      required: false
+
+  - type: input
+    id: atmosphere
+    attributes:
+      label: Atmosphere version
+      placeholder: e.g. 1.x.x
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: Describe clearly what happened.
+      placeholder: Explain the problem in as much detail as possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the steps needed to reproduce the issue.
+      placeholder: |
+        1. Open FolderWifi
+        2. Enable Online mode
+        3. Open the web interface
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Add screenshots, logs, filenames, network details, or any other useful context.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I am using an official FolderWifi release downloaded from this GitHub repository.
+          required: true
+        - label: I checked existing issues and did not find the same problem already reported.
+          required: true
+        - label: I understand that FolderWifi is currently Alpha software.
+          required: true
