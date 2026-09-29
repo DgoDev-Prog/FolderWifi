@@ -252,6 +252,12 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         <div class="action-bar">
             <button id="btnMkdir" class="btn btn-primary" onclick="openModal('folderModal')" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>📁 Nueva Carpeta</button>
             <button id="btnUpload" class="btn" onclick="document.getElementById('fileInput').click()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>⬆️ Subir Archivo</button>
+            <button id="btnDownloadSelected"
+                class="btn"
+                onclick="downloadSelected()"
+                )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>
+                📥 Descargar selección
+            </button>
             <button id="btnCopy" class="btn" onclick="copySelected()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>📋 Copiar</button>
             <button id="btnCut" class="btn" onclick="cutSelected()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>✂️ Cortar (Mover)</button>
             <button id="btnSelectAll" class="btn" onclick="selectAllCheckboxes()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>☑️ Seleccionar Todo</button>
@@ -465,6 +471,29 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
             openModal('renameModal');
         }
 
+        function downloadSelected() {
+            const selected = Array.from(
+                document.querySelectorAll('.file-select:checked')
+            ).map(b => b.value);
+
+            if (selected.length === 0) {
+                return alert('Selecciona al menos un elemento.');
+            }
+
+            const params = new URLSearchParams();
+
+            selected.forEach(item => {
+                params.append('item', item);
+            });
+
+            const currentPath = ")HTML" + currentPath + R"HTML(";
+
+            params.append('parent', currentPath);
+
+            window.location.href =
+                '/download-selection?' + params.toString();
+        }
+        
         function copySelected() {
             const selected = Array.from(document.querySelectorAll('.file-select:checked')).map(b => b.value);
             if(selected.length === 0) return alert('Selecciona al menos un elemento.');
@@ -845,6 +874,414 @@ void handleClient(int clientFd) {
             }
 
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
+
+            } else if (url.rfind("/download-selection", 0) == 0) {
+                if (!g_isOnline) {
+                    sendHttpResponse(
+                        clientFd,
+                        "403 Forbidden",
+                        "text/plain",
+                        "Acceso denegado: Descargas bloqueadas en OFFLINE"
+                    );
+                    close(clientFd);
+                    return;
+                }
+
+                // ------------------------------------------------------------
+                // Leer parametros:
+                //
+                // /download-selection?
+                // item=sdmc:/Carpeta1&
+                // item=sdmc:/archivo.txt&
+                // parent=sdmc:/
+                // ------------------------------------------------------------
+
+                size_t queryPos = url.find('?');
+
+                if (queryPos == std::string::npos) {
+                    sendHttpResponse(
+                        clientFd,
+                        "400 Bad Request",
+                        "text/plain",
+                        "No se recibieron elementos para descargar"
+                    );
+                    close(clientFd);
+                    return;
+                }
+
+                std::string query = url.substr(queryPos + 1);
+
+                std::vector<std::string> sources;
+                std::string parentPath = "sdmc:/";
+
+                size_t start = 0;
+
+                while (start <= query.length()) {
+                    size_t end = query.find('&', start);
+
+                    std::string parameter;
+
+                    if (end == std::string::npos) {
+                        parameter = query.substr(start);
+                    } else {
+                        parameter = query.substr(
+                            start,
+                            end - start
+                        );
+                    }
+
+                    // item=
+                    if (parameter.rfind("item=", 0) == 0) {
+                        std::string itemPath =
+                            urlDecode(parameter.substr(5));
+
+                        itemPath =
+                            FolderWifi::FileManager::normalizeSdPath(
+                                itemPath
+                            );
+
+                        if (!itemPath.empty() &&
+                            itemPath != "sdmc:/") {
+
+                            sources.push_back(itemPath);
+                        }
+                    }
+
+                    // parent=
+                    else if (parameter.rfind("parent=", 0) == 0) {
+                        std::string requestedParent =
+                            urlDecode(parameter.substr(7));
+
+                        std::string normalizedParent =
+                            FolderWifi::FileManager::normalizeSdPath(
+                                requestedParent
+                            );
+
+                        if (!normalizedParent.empty()) {
+                            parentPath = normalizedParent;
+                        }
+                    }
+
+                    if (end == std::string::npos) {
+                        break;
+                    }
+
+                    start = end + 1;
+                }
+
+
+                // ------------------------------------------------------------
+                // Comprobar que haya elementos
+                // ------------------------------------------------------------
+
+                if (sources.empty()) {
+                    sendHttpResponse(
+                        clientFd,
+                        "400 Bad Request",
+                        "text/plain",
+                        "No hay elementos validos seleccionados"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+
+                // ------------------------------------------------------------
+                // Nombre del ZIP que vera el usuario
+                // ------------------------------------------------------------
+
+                std::string cleanParent = parentPath;
+
+                while (cleanParent.length() > 6 &&
+                    cleanParent.back() == '/') {
+                    cleanParent.pop_back();
+                }
+
+                std::string downloadName;
+
+                if (cleanParent == "sdmc:" ||
+                    cleanParent == "sdmc:/") {
+
+                    downloadName =
+                        "FolderWifi_SD_Selection.zip";
+
+                } else {
+
+                    size_t parentSlash =
+                        cleanParent.find_last_of('/');
+
+                    std::string parentName =
+                        (parentSlash == std::string::npos)
+                            ? cleanParent
+                            : cleanParent.substr(parentSlash + 1);
+
+                    downloadName =
+                        parentName +
+                        "_Selection.zip";
+                }
+
+
+                // ------------------------------------------------------------
+                // Crear nombre para ZIP temporal en la SD
+                // ------------------------------------------------------------
+
+                std::string tempZipPath = parentPath;
+
+                if (tempZipPath.back() != '/') {
+                    tempZipPath += "/";
+                }
+
+                tempZipPath +=
+                    ".folderwifi_selection_" +
+                    std::to_string(
+                        static_cast<long long>(
+                            time(nullptr)
+                        )
+                    ) +
+                    ".zip";
+
+
+                addLog(
+                    "Preparando seleccion ZIP: " +
+                    std::to_string(sources.size()) +
+                    " elemento(s)"
+                );
+
+
+                // ------------------------------------------------------------
+                // Crear ZIP
+                // ------------------------------------------------------------
+
+                std::string error;
+
+                if (!FolderWifi::ArchiveManager::createZip(
+                        sources,
+                        tempZipPath,
+                        error
+                    )) {
+
+                    addLog(
+                        "Error ZIP seleccion: " +
+                        error
+                    );
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Error,
+                        "selection_download_failed",
+                        "No se pudo preparar la seleccion"
+                    );
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain; charset=utf-8",
+                        "Error: " + error
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+
+                // ------------------------------------------------------------
+                // Abrir ZIP temporal
+                // ------------------------------------------------------------
+
+                FILE* zipFile =
+                    fopen(
+                        tempZipPath.c_str(),
+                        "rb"
+                    );
+
+                if (!zipFile) {
+
+                    remove(tempZipPath.c_str());
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "No se pudo abrir el ZIP temporal"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+
+                // ------------------------------------------------------------
+                // Obtener tamano
+                // ------------------------------------------------------------
+
+                struct stat zipStat;
+
+                if (stat(
+                        tempZipPath.c_str(),
+                        &zipStat
+                    ) != 0) {
+
+                    fclose(zipFile);
+                    remove(tempZipPath.c_str());
+
+                    sendHttpResponse(
+                        clientFd,
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "No se pudo obtener el tamano del ZIP"
+                    );
+
+                    close(clientFd);
+                    return;
+                }
+
+
+                // ------------------------------------------------------------
+                // Cabeceras HTTP
+                // ------------------------------------------------------------
+
+                std::string headers =
+                    "HTTP/1.1 200 OK\r\n";
+
+                headers +=
+                    "Content-Type: application/zip\r\n";
+
+                headers +=
+                    "Content-Disposition: attachment; filename=\"" +
+                    downloadName +
+                    "\"\r\n";
+
+                headers +=
+                    "Content-Length: " +
+                    std::to_string(
+                        static_cast<unsigned long long>(
+                            zipStat.st_size
+                        )
+                    ) +
+                    "\r\n";
+
+                headers +=
+                    "Connection: close\r\n\r\n";
+
+
+                // ------------------------------------------------------------
+                // Funcion local para asegurar que se envien todos los bytes
+                // ------------------------------------------------------------
+
+                auto sendAll = [](
+                    int socketFd,
+                    const char* data,
+                    size_t length
+                ) -> bool {
+
+                    size_t totalSent = 0;
+
+                    while (totalSent < length) {
+
+                        ssize_t sent = send(
+                            socketFd,
+                            data + totalSent,
+                            length - totalSent,
+                            0
+                        );
+
+                        if (sent <= 0) {
+                            return false;
+                        }
+
+                        totalSent +=
+                            static_cast<size_t>(sent);
+                    }
+
+                    return true;
+                };
+
+
+                // ------------------------------------------------------------
+                // Enviar cabeceras
+                // ------------------------------------------------------------
+
+                bool sendOk =
+                    sendAll(
+                        clientFd,
+                        headers.c_str(),
+                        headers.length()
+                    );
+
+
+                // ------------------------------------------------------------
+                // Enviar ZIP
+                // ------------------------------------------------------------
+
+                char zipBuffer[65536];
+
+                while (sendOk) {
+
+                    size_t bytesRead =
+                        fread(
+                            zipBuffer,
+                            1,
+                            sizeof(zipBuffer),
+                            zipFile
+                        );
+
+                    if (bytesRead == 0) {
+                        break;
+                    }
+
+                    if (!sendAll(
+                            clientFd,
+                            zipBuffer,
+                            bytesRead
+                        )) {
+
+                        sendOk = false;
+                        break;
+                    }
+                }
+
+
+                fclose(zipFile);
+
+
+                // ------------------------------------------------------------
+                // El ZIP era temporal.
+                // Siempre se elimina.
+                // ------------------------------------------------------------
+
+                remove(tempZipPath.c_str());
+
+
+                // ------------------------------------------------------------
+                // Resultado
+                // ------------------------------------------------------------
+
+                if (sendOk) {
+
+                    addLog(
+                        "Seleccion descargada: " +
+                        std::to_string(sources.size()) +
+                        " elemento(s)"
+                    );
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Success,
+                        "selection_downloaded",
+                        "Seleccion descargada correctamente"
+                    );
+
+                } else {
+
+                    addLog(
+                        "Conexion interrumpida durante descarga ZIP"
+                    );
+
+                    FolderWifi::NotificationManager::notify(
+                        FolderWifi::NotificationType::Warning,
+                        "selection_download_interrupted",
+                        "La descarga de la seleccion fue interrumpida"
+                    );
+                }
 
             } else if (url.rfind("/download-folder", 0) == 0) {
                 if (!g_isOnline) {
