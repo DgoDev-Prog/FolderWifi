@@ -323,6 +323,26 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         </div>
 
         <footer>
+            <div style="margin-bottom: 12px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                <a
+                    href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=bug_report.yml"
+                    class="btn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    Reportar un problema
+                </a>
+
+                <a
+                    href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=feature_request.yml"
+                    class="btn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    Sugerir una mejora
+                </a>
+            </div>
+
             FolderWifi v0.1.0-alpha &bull; Nintendo Switch Homebrew &bull; Creado por <strong>Tssr - Diego Ramirez</strong>
         </footer>
     </div>
