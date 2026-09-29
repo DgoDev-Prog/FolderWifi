@@ -1,5 +1,5 @@
 #include <switch.h>
-
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -193,6 +193,15 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         .clipboard-bar { background: var(--bg-card); border: 1px solid var(--accent-blue); padding: 10px 16px; border-radius: 8px; margin-bottom: 15px; display: none; justify-content: space-between; align-items: center; }
 
         .breadcrumb { background-color: var(--bg-card); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 0.95rem; color: var(--accent-blue); border: 1px solid var(--border-color); word-break: break-all; }
+        .breadcrumb a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
 
         .file-list { background-color: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; }
         .file-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border-color); }
@@ -269,11 +278,63 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
             <span id="clipboardInfo">0 elementos en portapapeles</span>
             <button class="btn btn-primary" onclick="pasteClipboard()">📌 Pegar Aquí</button>
         </div>
+        )HTML";
 
-        <div class="breadcrumb">SDMC: <strong>)HTML" + currentPath + R"HTML(</strong></div>
+        // Breadcrumb navegable
+        html += R"HTML(
+            <div class="breadcrumb">
+                <a href="/?path=sdmc:/">SDMC</a>
+        )HTML";
 
-        <div class="file-list">
-)HTML";
+        std::string breadcrumbPath = "sdmc:/";
+        std::string relativePath = currentPath;
+
+        if (relativePath.rfind("sdmc:/", 0) == 0) {
+            relativePath = relativePath.substr(6);
+        }
+
+        size_t breadcrumbStart = 0;
+
+        while (breadcrumbStart < relativePath.length()) {
+            size_t breadcrumbEnd = relativePath.find('/', breadcrumbStart);
+
+            std::string part;
+
+            if (breadcrumbEnd == std::string::npos) {
+                part = relativePath.substr(breadcrumbStart);
+            } else {
+                part = relativePath.substr(
+                    breadcrumbStart,
+                    breadcrumbEnd - breadcrumbStart
+                );
+            }
+
+            if (!part.empty()) {
+                if (breadcrumbPath.back() != '/') {
+                    breadcrumbPath += "/";
+                }
+
+                breadcrumbPath += part;
+
+                html += " / <a href=\"/?path=" +
+                        breadcrumbPath +
+                        "\">" +
+                        part +
+                        "</a>";
+            }
+
+            if (breadcrumbEnd == std::string::npos) {
+                break;
+            }
+
+            breadcrumbStart = breadcrumbEnd + 1;
+        }
+
+        html += R"HTML(
+            </div>
+
+            <div class="file-list">
+        )HTML";
 
     if (currentPath != "sdmc:/" && currentPath != "sdmc:" && !currentPath.empty()) {
     std::string parentPath = currentPath;
@@ -558,7 +619,17 @@ void handleClient(int clientFd) {
 
                 } else {
 
-                    addLog("Error al crear carpeta: " + folderName);
+                    int errorCode = errno;
+
+                    std::string errorMessage =
+                        "Error al crear carpeta: " +
+                        folderName +
+                        " | errno=" +
+                        std::to_string(errorCode) +
+                        " | " +
+                        strerror(errorCode);
+
+                    addLog(errorMessage);
 
                     FolderWifi::NotificationManager::notify(
                         FolderWifi::NotificationType::Error,
