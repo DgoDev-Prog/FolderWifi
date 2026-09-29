@@ -3,8 +3,9 @@
         {
             "name": "Nintendo Switch - devkitPro",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${env:DEVKITPRO}/libnx/include"
+            "${workspaceFolder}/**",
+            "${env:DEVKITPRO}/libnx/include",
+            "${env:DEVKITPRO}/portlibs/switch/include"
             ],
             "defines": [
                 "__SWITCH__"

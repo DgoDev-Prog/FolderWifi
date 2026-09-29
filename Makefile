@@ -79,7 +79,7 @@ LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs \
 # Librerías
 #---------------------------------------------------------------------------------
 
-LIBS := -lnx
+LIBS := -lminizip -lz -lnx
 
 LIBDIRS := $(PORTLIBS) $(LIBNX)
 

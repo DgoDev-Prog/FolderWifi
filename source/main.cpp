@@ -16,15 +16,15 @@
 #include <algorithm>
 #include <time.h>
 #include "notification_manager.hpp"
+#include "archive_manager.hpp"
 #include "gui.hpp"
 #include "file_manager.hpp"
 
 #define HTTP_PORT 8080
 #define BUFFER_SIZE 16384
 
-// Estado Global del Servidor
-bool g_isOnline = false; // Inicia en OFFLINE (Solo Lectura)
-bool g_showQR = false;   // Estado de la ventana flotante QR
+bool g_isOnline = false;
+bool g_showQR = false;
 
 std::vector<std::string> g_logMessages;
 
@@ -35,7 +35,6 @@ struct FileInfo {
     off_t size;
 };
 
-// Agregar mensaje con timestamp al registro de actividad
 void addLog(const std::string& msg) {
     time_t rawtime;
     struct tm * timeinfo;
@@ -51,7 +50,6 @@ void addLog(const std::string& msg) {
     }
 }
 
-// Decodificador URL
 std::string urlDecode(const std::string& str) {
     std::string result;
     for (size_t i = 0; i < str.length(); ++i) {
@@ -69,7 +67,6 @@ std::string urlDecode(const std::string& str) {
     return result;
 }
 
-// Lista de directorios en la tarjeta SD
 std::vector<FileInfo> getDirectoryListing(const std::string& path) {
     std::vector<FileInfo> files;
     std::string realPath = path;
@@ -108,7 +105,6 @@ std::vector<FileInfo> getDirectoryListing(const std::string& path) {
     return files;
 }
 
-// Copia de archivos binarios
 bool copyFile(const std::string& src, const std::string& dst) {
     FILE* in = fopen(src.c_str(), "rb");
     if (!in) return false;
@@ -125,7 +121,6 @@ bool copyFile(const std::string& src, const std::string& dst) {
     return true;
 }
 
-// Generador de la Interfaz Web (Estilo Cyberpunk con Polling en Vivo)
 std::string generateHtmlPage(const std::string& currentPath, const std::vector<FileInfo>& files) {
     std::string statusClass = g_isOnline ? "status-online" : "status-offline";
     std::string statusText = g_isOnline ? "● ONLINE (Control Total)" : "● OFFLINE (Solo Lectura)";
@@ -169,7 +164,7 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; transition: background 0.2s, color 0.2s; }
         body { background-color: var(--bg-primary); color: var(--text-main); padding: 20px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 980px; }
-        
+
         header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 2px solid var(--border-color); margin-bottom: 20px; }
         .logo-box { display: flex; align-items: center; gap: 14px; }
         .logo-title { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.5px; background: linear-gradient(90deg, var(--accent-red), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -193,15 +188,8 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         .clipboard-bar { background: var(--bg-card); border: 1px solid var(--accent-blue); padding: 10px 16px; border-radius: 8px; margin-bottom: 15px; display: none; justify-content: space-between; align-items: center; }
 
         .breadcrumb { background-color: var(--bg-card); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 0.95rem; color: var(--accent-blue); border: 1px solid var(--border-color); word-break: break-all; }
-        .breadcrumb a {
-            color: var(--accent-blue);
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
+        .breadcrumb a { color: var(--accent-blue); text-decoration: none; font-weight: 600; }
+        .breadcrumb a:hover { text-decoration: underline; }
 
         .file-list { background-color: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; }
         .file-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border-color); }
@@ -267,7 +255,7 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
             <button id="btnCopy" class="btn" onclick="copySelected()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>📋 Copiar</button>
             <button id="btnCut" class="btn" onclick="cutSelected()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>✂️ Cortar (Mover)</button>
             <button id="btnSelectAll" class="btn" onclick="selectAllCheckboxes()" )HTML" + (g_isOnline ? "" : "disabled") + R"HTML(>☑️ Seleccionar Todo</button>
-            
+
             <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
                 <input type="file" id="fileInput" name="file" onchange="document.getElementById('uploadForm').submit()">
                 <input type="hidden" name="path" value=")HTML" + currentPath + R"HTML(">
@@ -278,94 +266,86 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
             <span id="clipboardInfo">0 elementos en portapapeles</span>
             <button class="btn btn-primary" onclick="pasteClipboard()">📌 Pegar Aquí</button>
         </div>
-        )HTML";
+)HTML";
 
-        // Breadcrumb navegable
-        html += R"HTML(
-            <div class="breadcrumb">
-                <a href="/?path=sdmc:/">SDMC</a>
-        )HTML";
+    html += R"HTML(
+        <div class="breadcrumb">
+            <a href="/?path=sdmc:/">SDMC</a>
+)HTML";
 
-        std::string breadcrumbPath = "sdmc:/";
-        std::string relativePath = currentPath;
+    std::string breadcrumbPath = "sdmc:/";
+    std::string relativePath = currentPath;
 
-        if (relativePath.rfind("sdmc:/", 0) == 0) {
-            relativePath = relativePath.substr(6);
-        }
-
-        size_t breadcrumbStart = 0;
-
-        while (breadcrumbStart < relativePath.length()) {
-            size_t breadcrumbEnd = relativePath.find('/', breadcrumbStart);
-
-            std::string part;
-
-            if (breadcrumbEnd == std::string::npos) {
-                part = relativePath.substr(breadcrumbStart);
-            } else {
-                part = relativePath.substr(
-                    breadcrumbStart,
-                    breadcrumbEnd - breadcrumbStart
-                );
-            }
-
-            if (!part.empty()) {
-                if (breadcrumbPath.back() != '/') {
-                    breadcrumbPath += "/";
-                }
-
-                breadcrumbPath += part;
-
-                html += " / <a href=\"/?path=" +
-                        breadcrumbPath +
-                        "\">" +
-                        part +
-                        "</a>";
-            }
-
-            if (breadcrumbEnd == std::string::npos) {
-                break;
-            }
-
-            breadcrumbStart = breadcrumbEnd + 1;
-        }
-
-        html += R"HTML(
-            </div>
-
-            <div class="file-list">
-        )HTML";
-
-    if (currentPath != "sdmc:/" && currentPath != "sdmc:" && !currentPath.empty()) {
-    std::string parentPath = currentPath;
-
-    size_t lastSlash = parentPath.find_last_of('/');
-
-    if (lastSlash != std::string::npos && lastSlash > 6) {
-        parentPath = parentPath.substr(0, lastSlash);
-    } else {
-        parentPath = "sdmc:/";
+    if (relativePath.rfind("sdmc:/", 0) == 0) {
+        relativePath = relativePath.substr(6);
     }
 
-    // Volver directamente a la raíz de la SD
-    html += R"HTML(
-        <div class="file-item">
-            <a href="/?path=sdmc:/" class="file-info">
-                <span class="file-icon">🏠</span>
-                <span class="file-name">Volver a raíz</span>
-            </a>
-        </div>
-    )HTML";
+    size_t breadcrumbStart = 0;
 
-    // Volver únicamente un nivel
+    while (breadcrumbStart < relativePath.length()) {
+        size_t breadcrumbEnd = relativePath.find('/', breadcrumbStart);
+        std::string part;
+
+        if (breadcrumbEnd == std::string::npos) {
+            part = relativePath.substr(breadcrumbStart);
+        } else {
+            part = relativePath.substr(breadcrumbStart, breadcrumbEnd - breadcrumbStart);
+        }
+
+        if (!part.empty()) {
+            if (breadcrumbPath.back() != '/') {
+                breadcrumbPath += "/";
+            }
+
+            breadcrumbPath += part;
+
+            html += " / <a href=\"/?path=" +
+                    breadcrumbPath +
+                    "\">" +
+                    part +
+                    "</a>";
+        }
+
+        if (breadcrumbEnd == std::string::npos) {
+            break;
+        }
+
+        breadcrumbStart = breadcrumbEnd + 1;
+    }
+
     html += R"HTML(
-        <div class="file-item">
-            <a href="/?path=)HTML" + parentPath + R"HTML(" class="file-info">
-                <span class="file-icon">⬆️</span>
-                <span class="file-name">.. (Volver atrás)</span>
-            </a>
         </div>
-    )HTML";
+
+        <div class="file-list">
+)HTML";
+
+    if (currentPath != "sdmc:/" && currentPath != "sdmc:" && !currentPath.empty()) {
+        std::string parentPath = currentPath;
+        size_t lastSlash = parentPath.find_last_of('/');
+
+        if (lastSlash != std::string::npos && lastSlash > 6) {
+            parentPath = parentPath.substr(0, lastSlash);
+        } else {
+            parentPath = "sdmc:/";
+        }
+
+        html += R"HTML(
+            <div class="file-item">
+                <a href="/?path=sdmc:/" class="file-info">
+                    <span class="file-icon">🏠</span>
+                    <span class="file-name">Volver a raíz</span>
+                </a>
+            </div>
+        )HTML";
+
+        html += R"HTML(
+            <div class="file-item">
+                <a href="/?path=)HTML" + parentPath + R"HTML(" class="file-info">
+                    <span class="file-icon">⬆️</span>
+                    <span class="file-name">.. (Volver atrás)</span>
+                </a>
+            </div>
+        )HTML";
     }
 
     for (const auto& file : files) {
@@ -380,7 +360,7 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         html += "    <span class=\"file-name\">" + file.name + "</span>";
         html += "  </a>";
         html += "  <span class=\"file-size\">" + sizeStr + "</span>";
-        
+
         html += "  <div class=\"item-actions\">";
         if (g_isOnline) {
             if (!file.isDir) {
@@ -400,21 +380,11 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
 
         <footer>
             <div style="margin-bottom: 12px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-                <a
-                    href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=bug_report.yml"
-                    class="btn"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
+                <a href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=bug_report.yml" class="btn" target="_blank" rel="noopener noreferrer">
                     Reportar un problema
                 </a>
 
-                <a
-                    href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=feature_request.yml"
-                    class="btn"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
+                <a href="https://github.com/DgoDev-Prog/FolderWifi/issues/new?template=feature_request.yml" class="btn" target="_blank" rel="noopener noreferrer">
                     Sugerir una mejora
                 </a>
             </div>
@@ -423,7 +393,6 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         </footer>
     </div>
 
-    <!-- Modales -->
     <div id="folderModal" class="modal">
         <div class="modal-content">
             <h3>Crear Nueva Carpeta</h3>
@@ -459,7 +428,7 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
 
         function openModal(id) { document.getElementById(id).style.display = 'flex'; }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-        
+
         function toggleTheme() {
             const current = document.documentElement.getAttribute('data-theme');
             const target = current === 'dark' ? 'light' : 'dark';
@@ -470,14 +439,13 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
         const savedTheme = localStorage.getItem('theme') || 'dark';
         document.documentElement.setAttribute('data-theme', savedTheme);
 
-        // Polling automático en tiempo real
         setInterval(async () => {
             try {
                 const res = await fetch('/api/status');
                 if(res.ok) {
                     const data = await res.json();
                     if(data.online !== lastState) {
-                        window.location.reload(); // Recarga la web automáticamente al alternar estado en la Switch
+                        window.location.reload();
                     }
                 }
             } catch(e){}
@@ -534,7 +502,6 @@ std::string generateHtmlPage(const std::string& currentPath, const std::vector<F
     return html;
 }
 
-// Respuestas HTTP
 void sendHttpResponse(int clientFd, const std::string& status, const std::string& contentType, const std::string& body) {
     std::string response = "HTTP/1.1 " + status + "\r\n";
     response += "Content-Type: " + contentType + "\r\n";
@@ -551,7 +518,6 @@ void sendHttpRedirect(int clientFd, const std::string& location) {
     send(clientFd, response.c_str(), response.length(), 0);
 }
 
-// Manejador del Servidor HTTP
 void handleClient(int clientFd) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, sizeof(buffer));
@@ -573,10 +539,120 @@ void handleClient(int clientFd) {
         addLog("HTTP " + method + " " + url);
     }
 
-    // Endpoint de Polling en Vivo para la Web
     if (url == "/api/status") {
         std::string json = "{\"online\":" + std::string(g_isOnline ? "true" : "false") + "}";
         sendHttpResponse(clientFd, "200 OK", "application/json", json);
+        close(clientFd);
+        return;
+    }
+
+    // Vista previa temporal del contenido que entraria en un ZIP
+    if (url.rfind("/api/archive-preview", 0) == 0) {
+        size_t pathPos = url.find("path=");
+
+        if (pathPos == std::string::npos) {
+            sendHttpResponse(clientFd, "400 Bad Request", "text/plain", "Falta el parametro path");
+            close(clientFd);
+            return;
+        }
+
+        std::string sourcePath = urlDecode(url.substr(pathPos + 5));
+
+        std::vector<std::string> sources;
+        sources.push_back(sourcePath);
+
+        std::vector<FolderWifi::ArchiveEntry> entries;
+        std::string error;
+
+        if (!FolderWifi::ArchiveManager::collectEntries(sources, entries, error)) {
+            sendHttpResponse(clientFd, "400 Bad Request", "text/plain", "Error: " + error);
+            close(clientFd);
+            return;
+        }
+
+        std::string output = "Elementos detectados: " + std::to_string(entries.size()) + "\n\n";
+
+        for (const auto& entry : entries) {
+            output += entry.isDirectory ? "[DIR]  " : "[FILE] ";
+            output += entry.archivePath;
+
+            if (!entry.isDirectory) {
+                output += " | " + std::to_string(entry.size) + " bytes";
+            }
+
+            output += "\n";
+        }
+
+        sendHttpResponse(clientFd, "200 OK", "text/plain; charset=utf-8", output);
+        close(clientFd);
+        return;
+    }
+
+    // Crear ZIP temporal de prueba
+    if (url.rfind("/api/archive-create", 0) == 0) {
+        size_t pathPos = url.find("path=");
+
+        if (pathPos == std::string::npos) {
+            sendHttpResponse(clientFd, "400 Bad Request", "text/plain", "Falta el parametro path");
+            close(clientFd);
+            return;
+        }
+
+        std::string requestedPath = urlDecode(url.substr(pathPos + 5));
+        std::string sourcePath = FolderWifi::FileManager::normalizeSdPath(requestedPath);
+
+        if (sourcePath.empty() || sourcePath == "sdmc:/") {
+            sendHttpResponse(clientFd, "400 Bad Request", "text/plain", "Ruta invalida para crear ZIP");
+            close(clientFd);
+            return;
+        }
+
+        while (sourcePath.length() > 6 && sourcePath.back() == '/') {
+            sourcePath.pop_back();
+        }
+
+        std::string outputZipPath = sourcePath + ".zip";
+
+        std::vector<std::string> sources;
+        sources.push_back(sourcePath);
+
+        std::string error;
+
+        if (!FolderWifi::ArchiveManager::createZip(sources, outputZipPath, error)) {
+            addLog("Error ZIP: " + error);
+
+            FolderWifi::NotificationManager::notify(
+                FolderWifi::NotificationType::Error,
+                "zip_create_failed",
+                "No se pudo crear el ZIP"
+            );
+
+            sendHttpResponse(
+                clientFd,
+                "500 Internal Server Error",
+                "text/plain; charset=utf-8",
+                "Error: " + error
+            );
+
+            close(clientFd);
+            return;
+        }
+
+        addLog("ZIP creado: " + outputZipPath);
+
+        FolderWifi::NotificationManager::notify(
+            FolderWifi::NotificationType::Success,
+            "zip_created",
+            "ZIP creado correctamente"
+        );
+
+        sendHttpResponse(
+            clientFd,
+            "200 OK",
+            "text/plain; charset=utf-8",
+            "ZIP creado correctamente:\n" + outputZipPath
+        );
+
         close(clientFd);
         return;
     }
@@ -588,6 +664,7 @@ void handleClient(int clientFd) {
                 close(clientFd);
                 return;
             }
+
             size_t pathPos = url.find("path=");
             size_t namePos = url.find("name=");
 
@@ -598,17 +675,16 @@ void handleClient(int clientFd) {
                 size_t amp = url.find('&', pathPos);
                 parentPath = urlDecode(url.substr(pathPos + 5, (amp == std::string::npos) ? std::string::npos : (amp - (pathPos + 5))));
             }
+
             if (namePos != std::string::npos) {
                 size_t amp = url.find('&', namePos);
                 folderName = urlDecode(url.substr(namePos + 5, (amp == std::string::npos) ? std::string::npos : (amp - (namePos + 5))));
             }
 
-            std::string fullFolderPath =
-            FolderWifi::FileManager::joinSdPath(parentPath, folderName);
+            std::string fullFolderPath = FolderWifi::FileManager::joinSdPath(parentPath, folderName);
 
             if (!fullFolderPath.empty()) {
                 if (mkdir(fullFolderPath.c_str(), 0777) == 0) {
-
                     addLog("Carpeta creada: " + folderName);
 
                     FolderWifi::NotificationManager::notify(
@@ -616,9 +692,7 @@ void handleClient(int clientFd) {
                         "folder_created",
                         "Carpeta creada correctamente: " + folderName
                     );
-
                 } else {
-
                     int errorCode = errno;
 
                     std::string errorMessage =
@@ -637,9 +711,7 @@ void handleClient(int clientFd) {
                         "No se pudo crear la carpeta: " + folderName
                     );
                 }
-
             } else {
-
                 addLog("Ruta rechazada al crear carpeta");
 
                 FolderWifi::NotificationManager::notify(
@@ -648,6 +720,7 @@ void handleClient(int clientFd) {
                     "La ruta o el nombre indicado no es valido"
                 );
             }
+
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
 
         } else if (url.rfind("/rename", 0) == 0) {
@@ -656,19 +729,23 @@ void handleClient(int clientFd) {
                 close(clientFd);
                 return;
             }
+
             size_t oldPos = url.find("oldPath=");
             size_t newPos = url.find("newName=");
             size_t parentPos = url.find("parent=");
 
             std::string oldPath = "", newName = "", parentPath = "sdmc:/";
+
             if (oldPos != std::string::npos) {
                 size_t amp = url.find('&', oldPos);
                 oldPath = urlDecode(url.substr(oldPos + 8, (amp == std::string::npos) ? std::string::npos : (amp - (oldPos + 8))));
             }
+
             if (newPos != std::string::npos) {
                 size_t amp = url.find('&', newPos);
                 newName = urlDecode(url.substr(newPos + 8, (amp == std::string::npos) ? std::string::npos : (amp - (newPos + 8))));
             }
+
             if (parentPos != std::string::npos) {
                 size_t amp = url.find('&', parentPos);
                 parentPath = urlDecode(url.substr(parentPos + 7, (amp == std::string::npos) ? std::string::npos : (amp - (parentPos + 7))));
@@ -679,6 +756,7 @@ void handleClient(int clientFd) {
                 rename(oldPath.c_str(), targetPath.c_str());
                 addLog("Renombrado: " + newName);
             }
+
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
 
         } else if (url.rfind("/copy", 0) == 0 || url.rfind("/move", 0) == 0) {
@@ -687,15 +765,18 @@ void handleClient(int clientFd) {
                 close(clientFd);
                 return;
             }
+
             bool isMove = (url.rfind("/move", 0) == 0);
             size_t destPos = url.find("dest=");
             size_t srcPos = url.find("src=");
 
             std::string destPath = "sdmc:/", srcList = "";
+
             if (destPos != std::string::npos) {
                 size_t amp = url.find('&', destPos);
                 destPath = urlDecode(url.substr(destPos + 5, (amp == std::string::npos) ? std::string::npos : (amp - (destPos + 5))));
             }
+
             if (srcPos != std::string::npos) {
                 size_t amp = url.find('&', srcPos);
                 srcList = urlDecode(url.substr(srcPos + 4, (amp == std::string::npos) ? std::string::npos : (amp - (srcPos + 4))));
@@ -703,21 +784,28 @@ void handleClient(int clientFd) {
 
             if (!srcList.empty()) {
                 size_t start = 0, end = 0;
+
                 while ((end = srcList.find(',', start)) != std::string::npos) {
                     std::string item = srcList.substr(start, end - start);
                     std::string itemName = item.substr(item.find_last_of('/') + 1);
                     std::string target = (destPath.back() == '/') ? (destPath + itemName) : (destPath + "/" + itemName);
+
                     if (isMove) rename(item.c_str(), target.c_str());
                     else copyFile(item, target);
+
                     start = end + 1;
                 }
+
                 std::string item = srcList.substr(start);
                 std::string itemName = item.substr(item.find_last_of('/') + 1);
                 std::string target = (destPath.back() == '/') ? (destPath + itemName) : (destPath + "/" + itemName);
+
                 if (isMove) rename(item.c_str(), target.c_str());
                 else copyFile(item, target);
+
                 addLog((isMove ? "Mover: " : "Copiar: ") + destPath);
             }
+
             sendHttpRedirect(clientFd, "/?path=" + destPath);
 
         } else if (url.rfind("/delete", 0) == 0) {
@@ -726,6 +814,7 @@ void handleClient(int clientFd) {
                 close(clientFd);
                 return;
             }
+
             size_t pathPos = url.find("path=");
             size_t parentPos = url.find("parent=");
 
@@ -736,6 +825,7 @@ void handleClient(int clientFd) {
                 size_t amp = url.find('&', pathPos);
                 targetPath = urlDecode(url.substr(pathPos + 5, (amp == std::string::npos) ? std::string::npos : (amp - (pathPos + 5))));
             }
+
             if (parentPos != std::string::npos) {
                 size_t amp = url.find('&', parentPos);
                 parentPath = urlDecode(url.substr(parentPos + 7, (amp == std::string::npos) ? std::string::npos : (amp - (parentPos + 7))));
@@ -743,12 +833,15 @@ void handleClient(int clientFd) {
 
             if (!targetPath.empty()) {
                 struct stat st;
+
                 if (stat(targetPath.c_str(), &st) == 0) {
                     if (S_ISDIR(st.st_mode)) rmdir(targetPath.c_str());
                     else unlink(targetPath.c_str());
+
                     addLog("Eliminado: " + targetPath.substr(targetPath.find_last_of('/') + 1));
                 }
             }
+
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
 
         } else if (url.rfind("/download", 0) == 0) {
@@ -757,10 +850,13 @@ void handleClient(int clientFd) {
                 close(clientFd);
                 return;
             }
+
             size_t filePos = url.find("file=");
+
             if (filePos != std::string::npos) {
                 std::string filePath = urlDecode(url.substr(filePos + 5));
                 FILE* f = fopen(filePath.c_str(), "rb");
+
                 if (f) {
                     fseek(f, 0, SEEK_END);
                     long fileSize = ftell(f);
@@ -771,23 +867,27 @@ void handleClient(int clientFd) {
                     headers += "Content-Disposition: attachment; filename=\"" + filePath.substr(filePath.find_last_of('/') + 1) + "\"\r\n";
                     headers += "Content-Length: " + std::to_string(fileSize) + "\r\n";
                     headers += "Connection: close\r\n\r\n";
+
                     send(clientFd, headers.c_str(), headers.length(), 0);
 
                     char fileBuf[8192];
                     size_t bytesRead;
+
                     while ((bytesRead = fread(fileBuf, 1, sizeof(fileBuf), f)) > 0) {
                         send(clientFd, fileBuf, bytesRead, 0);
                     }
+
                     fclose(f);
                     addLog("Descarga: " + filePath.substr(filePath.find_last_of('/') + 1));
                 } else {
                     sendHttpResponse(clientFd, "404 Not Found", "text/plain", "Archivo no encontrado");
                 }
             }
+
         } else {
-            // Navegación de directorios
             std::string currentPath = "sdmc:/";
             size_t pathPos = url.find("path=");
+
             if (pathPos != std::string::npos) {
                 currentPath = urlDecode(url.substr(pathPos + 5));
             }
@@ -796,6 +896,7 @@ void handleClient(int clientFd) {
             std::string pageHtml = generateHtmlPage(currentPath, files);
             sendHttpResponse(clientFd, "200 OK", "text/html", pageHtml);
         }
+
     } else {
         sendHttpResponse(clientFd, "200 OK", "text/html", "Peticion procesada.");
     }
@@ -804,14 +905,12 @@ void handleClient(int clientFd) {
 }
 
 int main(int argc, char* argv[]) {
-    // Inicializar GUI Gráfica
     guiInit();
 
     PadState pad;
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeAny(&pad);
 
-    // Inicializar Red
     if (R_FAILED(socketInitializeDefault())) {
         addLog("ERROR: Fallo al inicializar sockets");
     }
@@ -822,11 +921,13 @@ int main(int argc, char* argv[]) {
 
     u32 ipAddr = 0;
     nifmGetCurrentIpAddress(&ipAddr);
+
     struct in_addr ip;
     ip.s_addr = ipAddr;
 
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
+
     setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in address;
@@ -839,7 +940,12 @@ int main(int argc, char* argv[]) {
 
     fcntl(serverFd, F_SETFL, O_NONBLOCK);
 
-    std::string ipUrl = "http://" + std::string(inet_ntoa(ip)) + ":" + std::to_string(HTTP_PORT);
+    std::string ipUrl =
+        "http://" +
+        std::string(inet_ntoa(ip)) +
+        ":" +
+        std::to_string(HTTP_PORT);
+
     addLog("Servidor FolderWifi iniciado");
     addLog("Direccion local: " + ipUrl);
 
@@ -847,41 +953,44 @@ int main(int argc, char* argv[]) {
         padUpdate(&pad);
         u64 kDown = padGetButtonsDown(&pad);
 
-        // [ + ] Salir
         if (kDown & HidNpadButton_Plus) break;
 
-        // [ A ] Alternar ONLINE / OFFLINE
         if (kDown & HidNpadButton_A) {
             g_isOnline = !g_isOnline;
             addLog(g_isOnline ? "Servidor cambiado a ONLINE" : "Servidor cambiado a OFFLINE");
         }
 
-        // [ Y ] o [ B ] Mostrar / Ocultar Ventana Flotante QR
         if (kDown & HidNpadButton_Y) {
             g_showQR = !g_showQR;
         }
+
         if ((kDown & HidNpadButton_B) && g_showQR) {
             g_showQR = false;
         }
 
-        // Renderizado GUI Gráfico de alta calidad (1280x720 framebuffer)
         u32 stride = 0;
         u32* fb = guiBeginFrame(&stride);
+
         if (fb) {
             renderMainUI(fb, g_isOnline, ipUrl, g_logMessages, g_showQR);
             guiEndFrame();
         }
 
-        // Atender peticiones HTTP
         struct sockaddr_in clientAddr;
         socklen_t addrLen = sizeof(clientAddr);
-        int clientFd = accept(serverFd, (struct sockaddr*)&clientAddr, &addrLen);
+
+        int clientFd =
+            accept(
+                serverFd,
+                (struct sockaddr*)&clientAddr,
+                &addrLen
+            );
 
         if (clientFd >= 0) {
             handleClient(clientFd);
         }
 
-        svcSleepThread(1000000); // 1ms descanso para 60fps fluidos
+        svcSleepThread(1000000);
     }
 
     close(serverFd);
