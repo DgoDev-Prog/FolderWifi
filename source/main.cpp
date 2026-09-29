@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include "gui.hpp"
+#include "file_manager.hpp"
 
 #define HTTP_PORT 8080
 #define BUFFER_SIZE 16384
@@ -493,7 +494,9 @@ void handleClient(int clientFd) {
     size_t urlEnd = request.find(' ', urlStart);
     std::string url = request.substr(urlStart, urlEnd - urlStart);
 
-    addLog("HTTP " + method + " " + url);
+    if (url != "/api/status") {
+        addLog("HTTP " + method + " " + url);
+    }
 
     // Endpoint de Polling en Vivo para la Web
     if (url == "/api/status") {
@@ -525,10 +528,17 @@ void handleClient(int clientFd) {
                 folderName = urlDecode(url.substr(namePos + 5, (amp == std::string::npos) ? std::string::npos : (amp - (namePos + 5))));
             }
 
-            if (!folderName.empty()) {
-                std::string fullFolderPath = (parentPath.back() == '/') ? (parentPath + folderName) : (parentPath + "/" + folderName);
-                mkdir(fullFolderPath.c_str(), 0777);
-                addLog("Carpeta creada: " + folderName);
+            std::string fullFolderPath =
+            FolderWifi::FileManager::joinSdPath(parentPath, folderName);
+
+            if (!fullFolderPath.empty()) {
+                if (mkdir(fullFolderPath.c_str(), 0777) == 0) {
+                    addLog("Carpeta creada: " + folderName);
+                } else {
+                    addLog("Error al crear carpeta: " + folderName);
+                }
+            } else {
+                addLog("Ruta rechazada al crear carpeta");
             }
             sendHttpRedirect(clientFd, "/?path=" + parentPath);
 

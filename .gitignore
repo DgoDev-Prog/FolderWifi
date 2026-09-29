@@ -1,4 +1,30 @@
+# ------------------------------------------------------------
+# FolderWifi
+# ------------------------------------------------------------
+
+# Build directory
 build/
+
+# Nintendo Switch / devkitPro build outputs
 *.elf
 *.nro
 *.nacp
+*.map
+*.lst
+
+# Object and dependency files
+*.o
+*.d
+
+# Temporary / backup files
+*.tmp
+*.bak
+*.log
+*~
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
