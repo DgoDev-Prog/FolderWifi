@@ -1,254 +1,101 @@
 # FolderWifi
 
-**FolderWifi** is a wireless file manager for Nintendo Switch Homebrew.
+Administrador HTTP de la tarjeta SD para Nintendo Switch Homebrew, desarrollado por **Tssr (Diego Ramirez)**. Versión **0.2.0-alpha**.
 
-It runs a local web server directly on the Nintendo Switch, allowing files and folders on the SD card to be browsed and managed from a web browser on another device connected to the same local network.
+## Uso
 
-> **Current version:** `v0.1.0-alpha`
+1. Copia `FolderWifi.nro` a `/switch/FolderWifi/` y ejecútalo desde hbmenu.
+2. Mantén la consola y el navegador en la misma red local. No hace falta Internet.
+3. Abre la dirección que muestra la consola o escanea el QR HTTP con **Y**. El QR vincula el navegador; para abrir la dirección manualmente, introduce el código mostrado en la consola.
+4. La aplicación comienza en **solo lectura**. Pulsa **A** en la pantalla principal para habilitar modificaciones. Volver a solo lectura detiene las operaciones modificadoras pendientes; lo ya completado permanece.
 
-Developed by **Tssr (Diego Ramirez)**.
-
----
-
-## Status
-
-FolderWifi is currently in **Alpha**.
-
-The application is functional and can already be used for local SD card management, but some features are incomplete and additional security and stability improvements are planned.
-
-This release is intended primarily for testing and early feedback.
-
----
-
-## Features
-
-### Nintendo Switch
-
-- Native Nintendo Switch interface.
-- Displays the Switch local IP address.
-- Built-in activity log.
-- QR code for quick access to the web interface.
-- Online / Offline operating modes.
-- Runs a local HTTP server on port `8080`.
-
-### Web Interface
-
-From a PC, phone or other device connected to the same network you can:
-
-- Browse the Nintendo Switch SD card.
-- Navigate through folders.
-- Download files.
-- Create folders.
-- Rename files and folders.
-- Delete files.
-- Delete empty folders.
-- Copy files.
-- Move files and folders.
-- Select multiple items.
-- Switch between light and dark web themes.
-
----
-
-## Online and Offline Modes
-
-FolderWifi starts in **Offline mode**.
-
-### Offline
-
-The SD card can be browsed from the web interface, but modification operations are disabled.
-
-### Online
-
-Press `A` on the Nintendo Switch to enable Online mode.
-
-Online mode enables file management operations such as:
-
-- Creating folders
-- Renaming
-- Copying
-- Moving
-- Deleting
-- Downloading
-
-> **Warning**
->
-> FolderWifi currently does not use authentication.
->
-> While Online mode is enabled, devices on the same local network that can access the FolderWifi address may potentially interact with the SD card.
->
-> Only enable Online mode on networks you trust.
-
----
-
-## Controls
-
-| Button | Action |
+| Control | Función |
 |---|---|
-| `A` | Toggle Online / Offline mode |
-| `Y` | Show or hide QR code |
-| `B` | Close QR window |
-| `+` | Exit FolderWifi |
+| A, pantalla principal | Alternar lectura / escritura |
+| Y | Ventana QR |
+| Izquierda / derecha, ventana QR | HTTP, Wi-Fi, datos Wi-Fi como texto |
+| X | Registro de actividad |
+| Arriba / abajo, registro | Desplazamiento; A vuelve a seguir los mensajes nuevos |
+| ZL | Opciones de conexión y red local |
+| A, opciones | Confirmar la opción seleccionada |
+| ZL → Dispositivos conectados | Consultar clientes del Wi-Fi creado por FolderWifi |
+| Arriba / abajo, dispositivos | Desplazar la lista; B vuelve a opciones de red |
+| B | Cerrar la ventana; rechazar la oferta de red local |
+| + | Detener servicios y salir |
 
----
+## Administración web
 
-## How to Use
+- Navegación sin recarga, historial del navegador, selección múltiple y por rangos, búsqueda en la carpeta o en subcarpetas, orden y paginación del listado.
+- Crear carpetas, copiar y mover árboles completos, renombrar, duplicar, combinar carpetas y consultar propiedades.
+- Descargar archivos mediante una autorización temporal; preparar selecciones/carpetas como ZIP; crear ZIP/ZIP64 y extraer ZIP con comprobación de integridad y protección de rutas.
+- Papelera con restauración y eliminación definitiva. Las operaciones se ejecutan en segundo plano, con progreso y cancelación.
+- Conflictos: reemplazar / combinar, conservar ambos, omitir o cancelar; decisión individual o para los siguientes conflictos. Se revisan conflictos conocidos antes de copiar/mover/renombrar/crear ZIP, y se comprueban nuevamente al ejecutar. Los conflictos adicionales y de extracción se resuelven durante la operación.
+- Los archivos que reemplazan a otros se preparan por separado. Un respaldo y un registro de recuperación protegen el cambio de nombre. Al iniciar se revisan reemplazos interrumpidos y se conservan en papelera los respaldos que necesiten revisión.
+- Diálogos, avisos y registro propios, temas claro/oscuro, menú contextual y atajos de escritorio. En móviles, selección táctil y barra inferior con todas las acciones; en escritorio el listado tiene desplazamiento independiente.
 
-1. Launch FolderWifi from the Nintendo Switch Homebrew Menu.
-2. Make sure the Nintendo Switch is connected to Wi-Fi.
-3. FolderWifi will display a local address similar to:
+Cancelar no deshace automáticamente lo terminado. Los resultados diferencian archivos completados, omitidos y reemplazados; los elementos que no se movieron permanecen en el portapapeles.
 
-```text
-http://192.168.1.100:8080
-```
+## Subidas y recuperación
 
-4. Connect your PC or mobile device to the same network.
-5. Open the displayed address in your web browser.
+Cada elemento fija su destino al añadirlo. La selección sin confirmar es un **borrador**. «Confirmar lote y subir» convierte ese borrador en un lote; los siguientes lotes confirmados esperan a que termine el activo. Añadir más archivos no confirma el nuevo borrador.
 
-You can also press `Y` to display the QR code.
+Las subidas utilizan identificadores persistentes, bloques de hasta 1 MiB, offset consultable y CRC32 por bloque y por archivo completo. Una pérdida de respuesta se reconcilia con la Switch antes de repetir datos. Los parciales permanecen en `sdmc:/.folderwifi/uploads/` y se publican al completar y verificar el archivo. CRC32 comprueba corrupción; la autorización es independiente.
 
----
+La cola y los archivos se conservan en IndexedDB mientras el navegador disponga de espacio y no elimine sus datos. El contenido de cada archivo se guarda una vez; los avances actualizan únicamente el estado. Si la cuota impide conservar archivos, se informa y la pestaña mantiene la selección en memoria. «Guardar pendientes» exporta destinos e identificadores; al recuperarlos hay que volver a seleccionar los originales. Se comprueban tamaño y contenido antes de continuar.
 
-## Installation
+Cerrar/suspender una página detiene su ejecución hasta volver a abrirla. Se consulta entonces el estado remoto. **Cambiar de IP cambia el origen web del navegador**: sus archivos guardados no migran automáticamente. Con la pestaña anterior abierta, «Trasladar a otra IP» abre la dirección local que introduces y comparte la cola y sus archivos con la nueva pestaña; comprueba origen, ventana y un identificador aleatorio del traslado, y pausa la anterior. El borrador permanece sin confirmar. Si esa pestaña está cerrada o el navegador impide abrirla, guarda/recupera los pendientes y vuelve a asociar los originales. Si solo se pierde momentáneamente la conexión y la dirección se conserva, la recuperación es automática.
 
-Copy the application to your Nintendo Switch SD card using a structure similar to:
+El selector de carpetas conserva las rutas relativas de los archivos. Para incluir carpetas vacías, arrastra la carpeta al listado desde un navegador de escritorio compatible, o sube un ZIP que las incluya y extráelo. Esto también ofrece una alternativa para móviles sin selector de carpetas.
 
-```text
-/switch/FolderWifi/FolderWifi.nro
-```
+## Wi-Fi local
 
-Then launch **FolderWifi** from the Homebrew Menu.
+Una conexión Wi-Fi o Ethernet que ya tenga IP local se conserva aunque no tenga Internet. Tras perderla se solicitan **cinco intentos** al gestor de red de Nintendo, con hasta 10 segundos por intento y pausas de 2, 4, 8 y 15 segundos. La elección entre perfiles conocidos corresponde al sistema; FolderWifi no enumera ni altera sus redes guardadas.
 
----
+Si no se recupera la conexión, se ofrece una red local. Al arrancar sin red también se ofrece. «Ahora no» conserva la pantalla y no activa el punto de acceso; **ZL** permite hacerlo más tarde.
 
-## Building from Source
+El modo local usa **LP2P con WPA2-PSK estándar**, requiere sistema **11.0.0 o posterior** y acceso al servicio por el entorno Homebrew. El servicio proporciona el SSID e IP reales; no se inventa una dirección. Se conserva el perfil devuelto para las siguientes activaciones. La contraseña tiene 20 caracteres aleatorios del servicio criptográfico y permanece hasta cambiarla voluntariamente. Cambiarla requiere reconectar los clientes.
 
-### Requirements
+La cabecera identifica **MODO APPLET** o **MODO APLICACIÓN** según el tipo devuelto por libnx; también queda registrado al iniciar. El modo no garantiza que el proceso tenga los identificadores requeridos por LP2P. Tras un rechazo con `00020AE7`, el límite solicitado se redujo de 8 a **1 cliente** para comprobar compatibilidad en hardware. El registro muestra el límite enviado, la operación LP2P que falla y su código; el último error de activación permanece visible aunque exista conexión habitual. Si se cambia la aplicación anfitriona, se vuelve a solicitar el identificador permitido de ese proceso en lugar de reutilizar el del grupo guardado.
 
-FolderWifi is developed using:
+En **Y** se muestran tres códigos diferentes:
 
-- devkitPro
-- devkitA64
-- libnx
-- Nintendo Switch Homebrew development environment
+- **HTTP**: dirección vigente y autorización en el fragmento de la URL, retirado del historial al abrir la página.
+- **Wi-Fi**: `WIFI:T:WPA;S:...;P:...;H:false;;`, con escapes y zona libre alrededor del código.
+- **Datos Wi-Fi**: nombre, contraseña, seguridad y estado como texto para guardar. Las credenciales también se muestran para introducirlas manualmente.
 
-A working devkitPro installation with the Nintendo Switch development packages is required.
+Después de crear el perfil se pueden consultar sus QR estando la red local inactiva; se indica ese estado. El lector del teléfono decide si reconoce el formato Wi-Fi. **La compilación no confirma compatibilidad del punto de acceso, persistencia del SSID ni lectura de cámaras: se deben probar en la consola y dispositivos reales.**
 
-### Build
+**ZL → Dispositivos conectados** abre una ventana con contador, IP y MAC de los miembros de la red local. La consulta se actualiza cada segundo desde el trabajador de red. Distingue red inactiva, consulta pendiente, lista vacía y fallo de consulta; una consulta fallida no se presenta como cero clientes. La propia consola se excluye por MAC o IP cuando se puede identificar. No se enumeran los clientes de un router externo ni se deduce el nombre/modelo del dispositivo. La ventana no aumenta el límite configurado de un cliente.
 
-Clone the repository and enter the project directory:
+Prueba física comunicada por el desarrollador: creación de la red local, conexión mediante QR Wi-Fi y lectura del QR de credenciales como texto funcionando en el equipo probado. El listado de miembros todavía requiere comprobación tras compilar este cambio.
 
-```bash
-git clone https://github.com/DgoDev-Prog/FolderWifi.git
-cd FolderWifi
-```
+No se crea una red abierta como alternativa, ni un puente/proxy hacia el teléfono. El servicio utiliza HTTP local, no TLS. Úsalo en redes locales de confianza; la contraseña del Wi-Fi y la vinculación web cumplen funciones distintas.
 
-Compile with:
+## Compilación y organización
 
-```bash
-make
-```
+Requisitos: devkitPro, devkitA64, libnx y portlibs `minizip` / `zlib`. Compilación C++17 mediante `make`; el Makefile produce ELF, NACP y NRO. El icono sigue siendo `icon.jpg`.
 
-To clean the project:
+| Fuente | Responsabilidad |
+|---|---|
+| `source/main.cpp` | Inicio/cierre, controles y dibujo; sin transferencias en su bucle |
+| `source/gui.cpp/.hpp`, `font8x16.cpp/.h` | Ventanas, QR, registro y framebuffer con su stride real |
+| `source/network.cpp`, `runtime.hpp` | Reconexión, perfil WPA2, comandos y estado compartido |
+| `source/http_server.cpp` | HTTP, autorización, descargas y trabajador de operaciones |
+| `source/upload_manager.cpp/.hpp` | Temporales, offsets, integridad y recuperación de subidas |
+| `source/file_manager.cpp/.hpp`, `operations.cpp/.hpp` | Rutas, manipulación, papelera, planificación y búsqueda |
+| `source/archive_manager.cpp/.hpp` | ZIP/ZIP64 y extracción |
+| `source/notification_manager.cpp/.hpp` | Historial de eventos para la web |
+| `source/web_ui.cpp` | HTML, CSS y JavaScript incluidos en el NRO |
+| `source/qr_codec.c/.h` | Generador QR de Nayuki, licencia MIT conservada |
 
-```bash
-make clean
-```
+El servidor dispone de tres trabajadores HTTP y uno para operaciones de archivos. Todas las respuestas usan envío completo con esperas limitadas. Las modificaciones requieren autorización y POST. Se rechazan parámetros ambiguos, cabeceras duplicadas, cuerpos fuera de límites, rutas fuera de SD, componentes peligrosos, Unicode inválido y acceso web a la configuración interna.
 
-The resulting Homebrew application will be generated as:
+Límites actuales: rutas de hasta 768 bytes UTF-8, componentes de hasta 255 bytes, 64 niveles de recursión, 100.000 elementos por recorrido, 50.000 entradas por carpeta, 5.000 resultados de búsqueda, 512 orígenes seleccionados por operación y 32 trabajos pendientes. El tamaño máximo de un archivo también depende del sistema de archivos de la SD. La fuente de consola representa español/latino básico; otros caracteres usan una sustitución. La web conserva Unicode.
 
-```text
-FolderWifi.nro
-```
+## Verificación
 
----
+Prueba física pendiente: controles mientras hay transferencias; archivos grandes y falta de espacio; cancelación y conflictos recursivos; pérdida de red y respuesta; reinicio con parciales; entrada/salida de LP2P; cinco reintentos; rechazo de la oferta; contraseña/SSID entre activaciones; los tres QR en Android/iOS. Una operación de copia o ZIP que pierda su seguimiento tras reiniciar el NRO se debe revisar antes de repetirla; la recuperación por identificador persistente corresponde a las subidas.
 
-## Project Structure
+La versión se mantiene en **0.2.0-alpha**. La prueba de red y QR no acredita todavía estabilidad de todas las operaciones de SD. Antes de etiquetar V1 estable se requieren compilación del estado final y resultados de las pruebas físicas anteriores, incluido el contador al conectar/desconectar un cliente. Los futuros transportes USB/FTP y otras ampliaciones no son requisitos para estabilizar la funcionalidad HTTP actual.
 
-```text
-FolderWifi/
-├── source/
-│   ├── font8x16.cpp
-│   ├── font8x16.h
-│   ├── gui.cpp
-│   ├── gui.hpp
-│   ├── main.cpp
-│   ├── qrcodegen.cpp
-│   └── qrcodegen.hpp
-│
-├── icon.jpg
-├── Makefile
-├── README.md
-└── .gitignore
-```
-
----
-
-## Alpha Limitations
-
-The current `v0.1.0-alpha` release has known limitations.
-
-- Uploading files from the web interface is not implemented yet.
-- Folder copying is not fully implemented.
-- Non-empty folders cannot currently be deleted recursively.
-- File operations still require additional path validation and error handling.
-- There is currently no authentication or access PIN.
-- The HTTP server is intended for trusted local networks only.
-- Additional testing on different SD cards, networks and Switch configurations is required.
-
-These areas are planned for future versions.
-
----
-
-## Planned Features
-
-Future development may include:
-
-- File uploads.
-- Recursive folder copy.
-- Recursive folder deletion.
-- Improved file operation validation.
-- Improved HTTP request handling.
-- Authentication or local access PIN.
-- Better error reporting.
-- GitHub issue / feedback integration.
-- Additional interface improvements.
-- Improved security for file operations.
-
----
-
-## Feedback and Bug Reports
-
-FolderWifi is currently under active development.
-
-Once the GitHub repository is configured, bugs and feature suggestions will be tracked using **GitHub Issues**.
-
-A future FolderWifi version is also planned to provide direct links from the web interface for:
-
-- Reporting a bug.
-- Suggesting a feature.
-
----
-
-## Disclaimer
-
-FolderWifi directly interacts with files stored on the Nintendo Switch SD card.
-
-Although safeguards are being developed, this is currently Alpha software.
-
-Make backups of important data before testing file modification features.
-
-Use FolderWifi at your own risk.
-
----
-
-## Author
-
-**Tssr (Diego Ramirez)**
-
-Nintendo Switch Homebrew project.
-
----
-
-## Version
-
-`v0.1.0-alpha`
+Referencias: [libnx LP2P](https://switchbrew.github.io/libnx/lp2p_8h.html), [ejemplo oficial](https://github.com/switchbrew/switch-examples/tree/master/network/lp2p), [formato Wi-Fi de ZXing](https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11), [QR-Code-generator de Nayuki](https://github.com/nayuki/QR-Code-generator). Se conserva la licencia MIT en los archivos de la biblioteca QR.

@@ -1,67 +1,21 @@
+#include "runtime.hpp"
 #include "notification_manager.hpp"
-
-namespace FolderWifi {
-
-std::vector<Notification> NotificationManager::notifications;
-uint64_t NotificationManager::nextId = 1;
-
-
-void NotificationManager::notify(
-    NotificationType type,
-    const std::string& code,
-    const std::string& message
-) {
-    Notification notification;
-
-    notification.id = nextId++;
-    notification.type = type;
-    notification.code = code;
-    notification.message = message;
-    notification.timestamp = time(nullptr);
-
-    notifications.push_back(notification);
-
-    if (notifications.size() > MAX_NOTIFICATIONS) {
-        notifications.erase(notifications.begin());
+#include <ctime>
+namespace fw {
+    static Mutex noticeMutex;
+    static std::vector<Notice> notices;
+    static uint64_t nextNotice=1;
+    void notify(const std::string& type,const std::string& message){
+        Guard g(noticeMutex);
+        notices.push_back({
+            nextNotice++,time(nullptr),type,message
+        });
+        if(notices.size()>100)notices.erase(notices.begin());
     }
-}
-
-
-const std::vector<Notification>& NotificationManager::getNotifications() {
-    return notifications;
-}
-
-
-bool NotificationManager::getLatest(Notification& notification) {
-    if (notifications.empty()) {
-        return false;
+    std::vector<Notice> noticesSince(uint64_t id){
+        Guard g(noticeMutex);
+        std::vector<Notice> out;
+        for(auto& n:notices)if(n.id>id)out.push_back(n);
+        return out;
     }
-
-    notification = notifications.back();
-    return true;
-}
-
-
-void NotificationManager::clear() {
-    notifications.clear();
-}
-
-
-const char* NotificationManager::typeToString(NotificationType type) {
-    switch (type) {
-        case NotificationType::Success:
-            return "success";
-
-        case NotificationType::Warning:
-            return "warning";
-
-        case NotificationType::Error:
-            return "error";
-
-        case NotificationType::Info:
-        default:
-            return "info";
-    }
-}
-
 }

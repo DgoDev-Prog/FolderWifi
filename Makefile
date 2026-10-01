@@ -32,7 +32,7 @@ INCLUDES := include
 
 APP_TITLE   := FolderWifi
 APP_AUTHOR  := Tssr (Diego Ramirez)
-APP_VERSION := 0.1.0-alpha
+APP_VERSION := 0.2.0-alpha
 
 # Nombre del JPG ubicado junto al Makefile
 ICON := icon.jpg
@@ -61,6 +61,7 @@ CFLAGS := -g \
 CFLAGS += $(INCLUDE) -D__SWITCH__
 
 CXXFLAGS := $(CFLAGS) \
+            -std=gnu++17 \
             -fno-rtti \
             -fno-exceptions
 
